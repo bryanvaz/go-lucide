@@ -1,0 +1,14 @@
+# Custom
+/.data
+/.tmp
+/tmp
+/.bin
+/*.env
+
+# JS
+node_modules/
+dist/
+
+# General
+.DS_Store
+
