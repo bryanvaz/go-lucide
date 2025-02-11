@@ -11,10 +11,11 @@ sync:
 
 .PHONY: build
 build:
-	@go run scripts/build_packages
+	@go run ./scripts/build_packages
 
 .PHONY: clean
 clean:
+	@rm -rf lucide/*
 	@rm -rf $(OUT_PATH)/*.go
 	@rm -rf $(OUT_PATH)/*.templ
 
