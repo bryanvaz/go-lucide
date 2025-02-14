@@ -1,9 +1,7 @@
 # Custom
-/.data
+/dist
 /.tmp
 /tmp
-/.bin
-/*.env
 
 # JS
 node_modules/

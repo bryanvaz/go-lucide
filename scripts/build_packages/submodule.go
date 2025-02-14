@@ -8,25 +8,6 @@ import (
 	"strings"
 )
 
-// updateSubmodule runs the git commands to sync the submodule and fetch tags
-func updateSubmodule(path string) error {
-	cmds := [][]string{
-		{"git", "submodule", "update", "--init", "--recursive"},
-		{"git", "fetch", "--tags"},
-	}
-
-	for _, args := range cmds {
-		cmd := exec.Command(args[0], args[1:]...)
-		cmd.Dir = path
-		cmd.Stdout = os.Stdout
-		cmd.Stderr = os.Stderr
-		if err := cmd.Run(); err != nil {
-			return err
-		}
-	}
-	return nil
-}
-
 // getGitTags extracts all tags from the submodule
 func getGitTags(path string) ([]string, error) {
 	cmd := exec.Command("git", "tag")
@@ -57,12 +38,12 @@ func findMissingTags(tagList []string, releases []Release) []Release {
 
 	// Add all tags from the first list into a set
 	for _, tag := range tagList {
-		tagSet[tag] = true
+		tagSet[strings.TrimPrefix(tag, "v")] = true
 	}
 
 	// Check for tags in the second list that are missing in the first list
 	for _, rel := range releases {
-		if !tagSet[rel.TagName] { // If the tag is not in the first list, add it to missingTags
+		if !tagSet[strings.TrimPrefix(rel.TagName, "v")] { // If the tag is not in the first list, add it to missingTags
 			missingTags = append(missingTags, rel)
 		}
 	}

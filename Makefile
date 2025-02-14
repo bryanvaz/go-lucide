@@ -1,6 +1,6 @@
 OUT_PATH=templ
-
-all: build
+VERSION_FILE = dist/go-templ-lucide-icons/VERSION
+VERSION := $(shell cat $(VERSION_FILE))
 
 deps:
 	go mod tidy
@@ -11,11 +11,19 @@ build:
 
 .PHONY: test
 test:
-	@cd ./packages/go-templ-lucide-icons && go test -v ./test
+	@cd ./dist/go-templ-lucide-icons && go test -v ./test
+
+.PHONY: commit
+commit:
+	@cd ./dist/go-templ-lucide-icons && git add . && git commit -m "chore: update icons to $(VERSION)"
+
+.PHONY: publish
+publish:
+	@cd ./dist/go-templ-lucide-icons && git tag v$(VERSION) && git push origin v$(VERSION)
+	@cd ./dist/go-templ-lucide-icons && git push origin main
+	@cd ./dist/go-templ-lucide-icons && GOPROXY=proxy.golang.org go list -m github.com/bryanvaz/go-templ-lucide-icons@v$(VERSION)
 
 .PHONY: clean
 clean:
-	@rm -rf lucide/*
-	@rm -rf $(OUT_PATH)/*.go
-	@rm -rf $(OUT_PATH)/*.templ
+	@rm -rf dist/*
 

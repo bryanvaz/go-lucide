@@ -2,7 +2,6 @@ package main
 
 import (
 	"fmt"
-	"github.com/AlecAivazis/survey/v2"
 	"os"
 	filepathPkg "path/filepath"
 	"time"
@@ -14,8 +13,9 @@ const (
 	LUCIDE_DIR           = "./lucide"
 	MIN_LUCIDE_VERSION   = "2024-01-01"
 	LUCIDE_GIT_URL       = "https://github.com/lucide-icons/lucide.git"
-	LUCIDE_GIT_DIR       = "./tmp/lucide"
-	TEMPL_SUBMODULE_PATH = "./packages/go-templ-lucide-icons"
+	LUCIDE_GIT_DIR       = "./dist/lucide"
+	TEMPL_GIT_URL        = "git@github.com:bryanvaz/go-templ-lucide-icons.git"
+	TEMPL_SUBMODULE_PATH = "./dist/go-templ-lucide-icons"
 	TEMPL_UTILS_PATH     = "./src/templ"
 )
 
@@ -34,68 +34,43 @@ func main() {
 		fmt.Println("Error fetching releases:", err)
 		os.Exit(1)
 	}
-	fmt.Printf("Found %d releases for %s/%s\n", len(lucideReleases), LUCIDE_OWNER, LUCIDE_REPO)
-	fmt.Printf("Latest release: %s (%s)\n", lucideReleases[0].TagName, lucideReleases[0].PublishedAt)
-
 	releasesJsonPath := filepathPkg.Join(LUCIDE_DIR, "releases.json")
 	saveReleasesToFile(lucideReleases, releasesJsonPath)
-	fmt.Println("Releases saved to", releasesJsonPath)
-
 	releases := filterReleasesAfter(lucideReleases, versionsAfterTime)
-	fmt.Printf("Found %d releases after %s\n", len(releases), MIN_LUCIDE_VERSION)
+	fmt.Printf("  Latest Lucide release: %s (%s)\n", lucideReleases[0].TagName, lucideReleases[0].PublishedAt)
 
-	// sync templ package library
-	fmt.Println("Updating submodule and fetching tags...")
-	err = updateSubmodule(TEMPL_SUBMODULE_PATH)
+	// sync the repo into the dist directory
+	fmt.Println("Syncing templ-lucide icon repo...")
+	os.MkdirAll("./dist", os.ModePerm)
+	err = cloneRepo(TEMPL_GIT_URL, TEMPL_SUBMODULE_PATH)
 	if err != nil {
-		fmt.Println("Error updating submodule:", err)
-		return
+		fmt.Println("Error cloning templ icon repo:", err)
+		os.Exit(1)
 	}
-	// get list of tags on templ package
-	fmt.Println("Extracting all tags from submodule...")
+	err = fetchTags(TEMPL_SUBMODULE_PATH)
+	if err != nil {
+		fmt.Println("Error fetching tags:", err)
+		os.Exit(1)
+	}
 	tags, err := getGitTags(TEMPL_SUBMODULE_PATH)
 	if err != nil {
 		fmt.Println("Error fetching tags:", err)
 		return
 	}
+	if len(tags) == 0 {
+		fmt.Println("No tags found in templ-lucide")
+	} else {
+		fmt.Printf("  Latest templ-lucide release: %s\n", tags[0])
+	}
 
 	// build list of missing tags starting from latest tag
 	missingReleases := findMissingTags(tags, releases)
-	fmt.Printf("Found %d missing tags\n", len(missingReleases))
-
-	// ask if want to sync the next version tag or all
-	var syncOption string = "Next Version"
-	var pushToGitHub bool
-	var publishToProxy bool
-
-	syncPrompt := &survey.Select{
-		Message: "Do you want to sync the next version tag or all?",
-		Options: []string{"Next Version", "All Versions"},
-	}
-	survey.AskOne(syncPrompt, &syncOption)
-
-	pushPrompt := &survey.Confirm{
-		Message: "Do you want to push changes to GitHub? (default: no)",
-		Default: false,
-	}
-	survey.AskOne(pushPrompt, &pushToGitHub)
-
-	if pushToGitHub {
-		publishPrompt := &survey.Confirm{
-			Message: "Do you want to publish to proxy.golang.org? (default: yes)",
-			Default: true,
-		}
-		survey.AskOne(publishPrompt, &publishToProxy)
-	}
-
-	fmt.Println("Responses:")
-	fmt.Printf("Sync option: %s\n", syncOption)
-	fmt.Printf("Push to GitHub: %t\n", pushToGitHub)
-	fmt.Printf("Publish to proxy.golang.org: %t\n", publishToProxy)
+	fmt.Printf("  Found %d missing tags\n", len(missingReleases))
+	currRel := missingReleases[len(missingReleases)-1]
+	fmt.Println("  Next release to sync:", currRel.TagName)
 
 	// sync the repo into the tmp directory
-	fmt.Println("Syncing lucide icon repo...")
-	os.MkdirAll("./tmp/lucide", os.ModePerm)
+	fmt.Println("Syncing upstream lucide repo for icons ...")
 	err = cloneRepo(LUCIDE_GIT_URL, LUCIDE_GIT_DIR)
 	if err != nil {
 		fmt.Println("Error cloning lucide repo:", err)
@@ -107,19 +82,19 @@ func main() {
 		os.Exit(1)
 	}
 
-	currRel := missingReleases[len(missingReleases)-1]
-	fmt.Println("working on lucide release:", currRel.TagName)
 	// switch to tag to sync
+	fmt.Printf("  Checking out tag %s\n", currRel.TagName)
 	checkoutTag(currRel.TagName, LUCIDE_GIT_DIR)
-	// read icons from icons directory
 	svgIcons, err := injestIcons(LUCIDE_GIT_DIR)
 	if err != nil {
 		fmt.Println("Error reading icons:", err)
 		os.Exit(1)
 	}
 
+	fmt.Println("--------------------------------------")
 	// Delete the templ output folder if it exists
 	submoduleTemplPath := filepathPkg.Join(TEMPL_SUBMODULE_PATH, "icons")
+	fmt.Println("Cleaning up old templ files...")
 	if _, err := os.Stat(submoduleTemplPath); err == nil {
 		err := os.RemoveAll(submoduleTemplPath)
 		if err != nil {
@@ -136,7 +111,7 @@ func main() {
 	}
 
 	// generate templ file
-	fmt.Printf("Generating %d templ and go files...\n", len(svgIcons))
+	fmt.Printf("Generating templ and go files for %d icons ...\n", len(svgIcons))
 	templFiles := make(map[string]string)
 	goFiles := make(map[string]string)
 	for _, icon := range svgIcons {
@@ -159,7 +134,7 @@ func main() {
 		goFiles[icon.Basename()] = goFile
 	}
 
-	fmt.Printf("Writing %d templ and go files...\n", len(templFiles))
+	fmt.Printf("Writing templ and go files ...\n")
 	if err := os.MkdirAll(submoduleTemplPath, os.ModePerm); err != nil {
 		fmt.Println("Error creating folder:", err)
 		os.Exit(1)
@@ -209,13 +184,7 @@ func main() {
 	}
 	fmt.Println("Rollup file saved to", rollupFilePath)
 
-	fmt.Println("Done writing files")
-
-	// commit changes
-	// add git tag
-
-	// publish to git hub if applicable
-	// publish to proxy.goland.org if applicable
+	fmt.Printf("Done writing files for release %s \n", currRel.TagName)
 }
 
 func copyFile(src, dst string) error {

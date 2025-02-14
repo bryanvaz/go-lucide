@@ -46,56 +46,80 @@ func cn(class string, attrs []templ.Attributes) string {
 	return strings.Join(uniqClasses, " ")
 }
 
-func at(attrs []templ.Attributes) templ.Attributes {
+func hasAttr(attrs templ.Attributes, key string) bool {
+	if attrs == nil {
+		return false
+	}
+	_, ok := attrs[key]
+	return ok
+}
+
+func getAttrStrOr(attrs templ.Attributes, key string, defaultValue string) string {
+	if hasAttr(attrs, key) {
+		if val, ok := attrs[key].(string); ok {
+			return val
+		}
+	}
+	return defaultValue
+}
+
+func mergeRightAttrs(attrs ...templ.Attributes) templ.Attributes {
 	attr := templ.Attributes{}
 	for _, attrParam := range attrs {
 		for key, value := range attrParam {
-			if key == "class" {
-				continue
-			}
-			attr[key] = value
-		}
-	}
-	size := "24"
-	if _, ok := attr["size"]; ok {
-		size = attr["size"].(string)
-		if _, ok := attr["width"]; !ok {
-			attr["width"] = attr["size"]
-		}
-		if _, ok := attr["height"]; !ok {
-			attr["height"] = attr["size"]
-		}
-		delete(attr, "size")
-	}
-	if _, ok := attr["color"]; ok {
-		if _, ok := attr["stroke"]; !ok {
-			attr["stroke"] = attr["color"]
-		}
-		delete(attr, "color")
-	}
-
-	strokeWidth := "2"
-	if _, ok := attr["stroke-width"]; ok {
-		strokeWidth = attr["stroke-width"].(string)
-	}
-	absoluteStrokeWidth := false
-	if val, ok := attr["absoluteStrokeWidth"]; ok {
-		absoluteStrokeWidth = asBool(val)
-		delete(attr, "absoluteStrokeWidth")
-	} else if val, ok := attr["absolute-stroke-width"]; ok {
-		absoluteStrokeWidth = asBool(val)
-		delete(attr, "absolute-stroke-width")
-	}
-	strokeWidthFloat, errStrokeWidth := strconv.ParseFloat(strokeWidth, 64)
-	sizeFloat, errSize := strconv.ParseFloat(size, 64)
-	if absoluteStrokeWidth && errStrokeWidth == nil && errSize == nil {
-		strokeWidth = strconv.FormatFloat(strokeWidthFloat*24/sizeFloat, 'f', -1, 64)
-	}
-	attr["stroke-width"] = strokeWidth
-	for key, value := range defaultAttributes {
-		if _, ok := attr[key]; !ok {
 			attr[key] = value
 		}
 	}
 	return attr
+}
+func at(attrs []templ.Attributes) templ.Attributes {
+	attr := mergeRightAttrs(attrs...)
+	if hasAttr(attr, "class") {
+		delete(attr, "class")
+	}
+	size := getAttrStrOr(attr, "size", "")
+	if hasAttr(attr, "size") {
+		delete(attr, "size")
+	}
+	strokeWidth := getAttrStrOr(attr, "stroke-width", defaultStrokeWidth)
+	if hasAttr(attr, "stroke-width") {
+		delete(attr, "stroke-width")
+	}
+	absoluteStrokeWidth := false
+	if hasAttr(attr, "absoluteStrokeWidth") {
+		absoluteStrokeWidth = asBool(attr["absoluteStrokeWidth"])
+		delete(attr, "absoluteStrokeWidth")
+	} else if hasAttr(attr, "absolute-stroke-width") {
+		absoluteStrokeWidth = asBool(attr["absolute-stroke-width"])
+		delete(attr, "absolute-stroke-width")
+	}
+	color := getAttrStrOr(attr, "color", "")
+	if hasAttr(attr, "color") {
+		delete(attr, "color")
+	}
+
+	finalAttr := templ.Attributes{
+		"width":        defaultWidth,
+		"height":       defaultHeight,
+		"stroke":       defaultStroke,
+		"stroke-width": strokeWidth,
+	}
+	if size != "" {
+		finalAttr["width"] = size
+		finalAttr["height"] = size
+	}
+	if color != "" {
+		finalAttr["stroke"] = color
+	}
+	strokeWidthFloat, errStrokeWidth := strconv.ParseFloat(strokeWidth, 64)
+	sizeFloat, errSize := strconv.ParseFloat(size, 64)
+	if absoluteStrokeWidth && errStrokeWidth == nil && errSize == nil {
+		finalAttr["stroke-width"] = strconv.FormatFloat(strokeWidthFloat*24/sizeFloat, 'f', -1, 64)
+	}
+
+	return mergeRightAttrs(
+		defaultAttributes,
+		finalAttr,
+		attr,
+	)
 }
