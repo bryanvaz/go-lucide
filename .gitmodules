@@ -1,0 +1,3 @@
+[submodule "packages/go-templ-lucide-icons"]
+	path = packages/go-templ-lucide-icons
+	url = https://github.com/bryanvaz/go-templ-lucide-icons.git

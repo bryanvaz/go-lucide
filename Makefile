@@ -1,17 +1,17 @@
 OUT_PATH=templ
 
-all: sync build
+all: build
 
 deps:
 	go mod tidy
 
-.PHONY: sync
-sync:
-	@bash scripts/sync_lucide.sh
-
 .PHONY: build
 build:
 	@go run ./scripts/build_packages
+
+.PHONY: test
+test:
+	@cd ./packages/go-templ-lucide-icons && go test -v ./test
 
 .PHONY: clean
 clean:

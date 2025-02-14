@@ -1,0 +1,38 @@
+package pages
+
+import "github.com/bryanvaz/go-templ-lucide-icons"
+
+templ Index() {
+	<!DOCTYPE html>
+	<html lang="en">
+		<head>
+			<meta charset="UTF-8"/>
+			<title>Lucide Test Server</title>
+		</head>
+		<body>
+			<h1>Icons</h1>
+			<p>
+				@icons.Pen()
+			</p>
+			<p>
+				@icons.Pen(templ.Attributes{
+					"size":         "48",
+					"color":        "red",
+					"stroke-width": "4",
+				})
+			</p>
+			<p>
+				@icons.Home(templ.Attributes{"size": "24"})
+				@icons.Home(templ.Attributes{"size": "32"})
+				@icons.Home(templ.Attributes{"size": "48"})
+				@icons.Home(templ.Attributes{"size": "96"})
+			</p>
+			<p>
+				@icons.Home(templ.Attributes{"size": "24", "absoluteStrokeWidth": true, "class": "myclass"})
+				@icons.Home(templ.Attributes{"size": "32", "absoluteStrokeWidth": true})
+				@icons.Home(templ.Attributes{"size": "48", "absoluteStrokeWidth": true})
+				@icons.Home(templ.Attributes{"size": "96", "absoluteStrokeWidth": true})
+			</p>
+		</body>
+	</html>
+}

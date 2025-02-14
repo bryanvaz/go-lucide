@@ -1,70 +1,221 @@
 package main
 
 import (
-	"bytes"
 	"fmt"
-	"github.com/a-h/templ/cmd/templ/imports"
-	"github.com/a-h/templ/generator"
-	parser "github.com/a-h/templ/parser/v2"
-	"go/format"
-	"golang.org/x/text/cases"
-	"golang.org/x/text/language"
+	"github.com/AlecAivazis/survey/v2"
 	"os"
-	"path/filepath"
-	"strings"
-	"text/template"
+	filepathPkg "path/filepath"
+	"time"
 )
 
-const templateContent = `package icons
+const (
+	LUCIDE_OWNER         = "lucide-icons"
+	LUCIDE_REPO          = "lucide"
+	LUCIDE_DIR           = "./lucide"
+	MIN_LUCIDE_VERSION   = "2024-01-01"
+	LUCIDE_GIT_URL       = "https://github.com/lucide-icons/lucide.git"
+	LUCIDE_GIT_DIR       = "./tmp/lucide"
+	TEMPL_SUBMODULE_PATH = "./packages/go-templ-lucide-icons"
+	TEMPL_UTILS_PATH     = "./src/templ"
+)
 
-templ {{ .FuncName }}(attrs ...templ.Attributes) {
-<svg
-    class={ cn("{{ .LucideClasses }}", attrs) }
-    { at(attrs)... }
-{{ .Content }}
-}
-`
-
-const templateTemplFunc = `
-templ {{ .FuncName }}(attrs ...templ.Attributes) {
-<svg
-    class={ cn("{{ .LucideClasses }}", attrs) }
-    { at(attrs)... }
-{{ .Content }}
-}
-`
-const templateTemplFile = `package icons
-
-{{ .Funcs }}
-`
-
-type SVGFile struct {
-	LucideClasses string
-	FuncName      string
-	Content       string
-}
-
-type TemplFile struct {
-	Funcs string
-}
-
-func kebabToCamelCase(input string) string {
-	words := strings.Split(input, "-")
-	c := cases.Title(language.English)
-	for i := range words {
-		words[i] = c.String(words[i])
+func main() {
+	InitializeGhClient()
+	versionsAfterTime, err := time.Parse("2006-01-02", MIN_LUCIDE_VERSION)
+	if err != nil {
+		fmt.Println("Error parsing date:", err)
+		return
 	}
-	return strings.Join(words, "")
-}
 
-func injectLine(content string, injection string, afterLine int) string {
-	lines := strings.Split(content, "\n")
-	if len(lines) > afterLine {
-		lines = append(lines[:afterLine], append([]string{injection}, lines[afterLine:]...)...)
-	} else {
-		lines = append(lines, injection)
+	// sync lucide icon versions
+	fmt.Println("Syncing lucide icon releases...")
+	lucideReleases, err := fetchReleases(LUCIDE_OWNER, LUCIDE_REPO)
+	if err != nil {
+		fmt.Println("Error fetching releases:", err)
+		os.Exit(1)
 	}
-	return strings.Join(lines, "\n")
+	fmt.Printf("Found %d releases for %s/%s\n", len(lucideReleases), LUCIDE_OWNER, LUCIDE_REPO)
+	fmt.Printf("Latest release: %s (%s)\n", lucideReleases[0].TagName, lucideReleases[0].PublishedAt)
+
+	releasesJsonPath := filepathPkg.Join(LUCIDE_DIR, "releases.json")
+	saveReleasesToFile(lucideReleases, releasesJsonPath)
+	fmt.Println("Releases saved to", releasesJsonPath)
+
+	releases := filterReleasesAfter(lucideReleases, versionsAfterTime)
+	fmt.Printf("Found %d releases after %s\n", len(releases), MIN_LUCIDE_VERSION)
+
+	// sync templ package library
+	fmt.Println("Updating submodule and fetching tags...")
+	err = updateSubmodule(TEMPL_SUBMODULE_PATH)
+	if err != nil {
+		fmt.Println("Error updating submodule:", err)
+		return
+	}
+	// get list of tags on templ package
+	fmt.Println("Extracting all tags from submodule...")
+	tags, err := getGitTags(TEMPL_SUBMODULE_PATH)
+	if err != nil {
+		fmt.Println("Error fetching tags:", err)
+		return
+	}
+
+	// build list of missing tags starting from latest tag
+	missingReleases := findMissingTags(tags, releases)
+	fmt.Printf("Found %d missing tags\n", len(missingReleases))
+
+	// ask if want to sync the next version tag or all
+	var syncOption string = "Next Version"
+	var pushToGitHub bool
+	var publishToProxy bool
+
+	syncPrompt := &survey.Select{
+		Message: "Do you want to sync the next version tag or all?",
+		Options: []string{"Next Version", "All Versions"},
+	}
+	survey.AskOne(syncPrompt, &syncOption)
+
+	pushPrompt := &survey.Confirm{
+		Message: "Do you want to push changes to GitHub? (default: no)",
+		Default: false,
+	}
+	survey.AskOne(pushPrompt, &pushToGitHub)
+
+	if pushToGitHub {
+		publishPrompt := &survey.Confirm{
+			Message: "Do you want to publish to proxy.golang.org? (default: yes)",
+			Default: true,
+		}
+		survey.AskOne(publishPrompt, &publishToProxy)
+	}
+
+	fmt.Println("Responses:")
+	fmt.Printf("Sync option: %s\n", syncOption)
+	fmt.Printf("Push to GitHub: %t\n", pushToGitHub)
+	fmt.Printf("Publish to proxy.golang.org: %t\n", publishToProxy)
+
+	// sync the repo into the tmp directory
+	fmt.Println("Syncing lucide icon repo...")
+	os.MkdirAll("./tmp/lucide", os.ModePerm)
+	err = cloneRepo(LUCIDE_GIT_URL, LUCIDE_GIT_DIR)
+	if err != nil {
+		fmt.Println("Error cloning lucide repo:", err)
+		os.Exit(1)
+	}
+	err = fetchTags(LUCIDE_GIT_DIR)
+	if err != nil {
+		fmt.Println("Error fetching tags:", err)
+		os.Exit(1)
+	}
+
+	currRel := missingReleases[len(missingReleases)-1]
+	fmt.Println("working on lucide release:", currRel.TagName)
+	// switch to tag to sync
+	checkoutTag(currRel.TagName, LUCIDE_GIT_DIR)
+	// read icons from icons directory
+	svgIcons, err := injestIcons(LUCIDE_GIT_DIR)
+	if err != nil {
+		fmt.Println("Error reading icons:", err)
+		os.Exit(1)
+	}
+
+	// Delete the templ output folder if it exists
+	submoduleTemplPath := filepathPkg.Join(TEMPL_SUBMODULE_PATH, "icons")
+	if _, err := os.Stat(submoduleTemplPath); err == nil {
+		err := os.RemoveAll(submoduleTemplPath)
+		if err != nil {
+			fmt.Println("Error deleting folder:", err)
+			os.Exit(1)
+		}
+	}
+	if _, err := os.Stat(filepathPkg.Join(submoduleTemplPath, "VERSION")); err == nil {
+		err := os.Remove(filepathPkg.Join(submoduleTemplPath, "VERSION"))
+		if err != nil {
+			fmt.Println("Error deleting file:", err)
+			os.Exit(1)
+		}
+	}
+
+	// generate templ file
+	fmt.Printf("Generating %d templ and go files...\n", len(svgIcons))
+	templFiles := make(map[string]string)
+	goFiles := make(map[string]string)
+	for _, icon := range svgIcons {
+		templFunc, err := generateTemplFunc(icon)
+		if err != nil {
+			fmt.Println("Error generating templ func:", err)
+			os.Exit(1)
+		}
+		templFile, err := generateTemplFile(templFunc)
+		if err != nil {
+			fmt.Println("Error generating templ file:", err)
+			os.Exit(1)
+		}
+		templFiles[icon.Basename()] = templFile
+		goFile, err := generateGoFromTempl(templFile)
+		if err != nil {
+			fmt.Println("Error generating go file:", err)
+			os.Exit(1)
+		}
+		goFiles[icon.Basename()] = goFile
+	}
+
+	fmt.Printf("Writing %d templ and go files...\n", len(templFiles))
+	if err := os.MkdirAll(submoduleTemplPath, os.ModePerm); err != nil {
+		fmt.Println("Error creating folder:", err)
+		os.Exit(1)
+	}
+	for basename, templFile := range templFiles {
+		outputTemplPath := filepathPkg.Join(submoduleTemplPath, basename+".templ")
+		outputGoPath := filepathPkg.Join(submoduleTemplPath, basename+"_templ.go")
+		if err := os.WriteFile(outputTemplPath, []byte(templFile), 0644); err != nil {
+			fmt.Println("Error writing to output file:", outputTemplPath, err)
+			os.Exit(1)
+		}
+		if err := os.WriteFile(outputGoPath, []byte(goFiles[basename]), 0644); err != nil {
+			fmt.Println("Error writing to output file:", outputGoPath, err)
+			os.Exit(1)
+		}
+	}
+
+	// Write VERSION file
+	if err := os.WriteFile(filepathPkg.Join(TEMPL_SUBMODULE_PATH, "VERSION"), []byte(currRel.TagName), 0644); err != nil {
+		fmt.Println("Error writing to VERSION file:", err)
+		os.Exit(1)
+	}
+
+	// Copy utils.go file
+	srcUtilsPath := filepathPkg.Join(TEMPL_UTILS_PATH, "utils.go")
+	dstUtilsPath := filepathPkg.Join(TEMPL_SUBMODULE_PATH, "icons", "utils.go")
+	if err := copyFile(srcUtilsPath, dstUtilsPath); err != nil {
+		fmt.Println("Error copying utils.go:", err)
+	}
+	fmt.Println("Copied utils.go")
+	srcDefaultAttributesPath := filepathPkg.Join(TEMPL_UTILS_PATH, "default_attributes.go")
+	destDefaultAttributesPath := filepathPkg.Join(TEMPL_SUBMODULE_PATH, "icons", "default_attributes.go")
+	if err := copyFile(srcDefaultAttributesPath, destDefaultAttributesPath); err != nil {
+		fmt.Println("Error copying default_attributes.go:", err)
+	}
+	fmt.Println("Copied default_attributes.go")
+
+	rollupFile, err := createRollupFile(svgIcons)
+	if err != nil {
+		fmt.Println("Error creating rollup file:", err)
+		os.Exit(1)
+	}
+	rollupFilePath := filepathPkg.Join(TEMPL_SUBMODULE_PATH, "icons.go")
+	if err := os.WriteFile(rollupFilePath, []byte(rollupFile), 0644); err != nil {
+		fmt.Println("Error writing to rollup file:", err)
+		os.Exit(1)
+	}
+	fmt.Println("Rollup file saved to", rollupFilePath)
+
+	fmt.Println("Done writing files")
+
+	// commit changes
+	// add git tag
+
+	// publish to git hub if applicable
+	// publish to proxy.goland.org if applicable
 }
 
 func copyFile(src, dst string) error {
@@ -73,181 +224,4 @@ func copyFile(src, dst string) error {
 		return err
 	}
 	return os.WriteFile(dst, data, 0644)
-}
-
-func main() {
-	inputDir := "./lucide/icons"
-	outputDir := "./templ"
-
-	// Ensure output directory exists
-	if err := os.MkdirAll(outputDir, os.ModePerm); err != nil {
-		fmt.Println("Error creating output directory:", err)
-		return
-	}
-
-	// Get all SVG files
-	files, err := os.ReadDir(inputDir)
-	if err != nil {
-		fmt.Println("Error reading directory:", err)
-		return
-	}
-
-	var svgFiles []string
-	for _, file := range files {
-		if filepath.Ext(file.Name()) == ".svg" {
-			svgFiles = append(svgFiles, file.Name())
-		}
-	}
-
-	// Parse template
-	// tmpl, err := template.New("svgTemplate").Parse(templateContent)
-	// if err != nil {
-	// 	fmt.Println("Error parsing template:", err)
-	// 	return
-	// }
-	tmplTemplFunc, err := template.New("templTemplate").Parse(templateTemplFunc)
-	if err != nil {
-		fmt.Println("Error parsing template:", err)
-		return
-	}
-	tmplTemplFile, err := template.New("templFile").Parse(templateTemplFile)
-	if err != nil {
-		fmt.Println("Error parsing template:", err)
-		return
-	}
-
-	// Remove existing .templ files
-	existingFiles, err := os.ReadDir(outputDir)
-	if err != nil {
-		fmt.Println("Error reading output directory:", err)
-		return
-	}
-	for _, file := range existingFiles {
-		if filepath.Ext(file.Name()) == ".templ" ||
-			filepath.Ext(file.Name()) == ".go" {
-			os.Remove(filepath.Join(outputDir, file.Name()))
-		}
-	}
-
-	funcs := make([]string, 0)
-
-	fmt.Println("Processing", len(svgFiles), "SVG files")
-	// Process each SVG file
-	for _, filename := range svgFiles {
-		inputPath := filepath.Join(inputDir, filename)
-		baseFilename := strings.TrimSuffix(filename, ".svg")
-		// outputFilename := baseFilename + ".templ"
-		camelCaseName := kebabToCamelCase(baseFilename)
-		// outputPath := filepath.Join(outputDir, outputFilename)
-
-		content, err := os.ReadFile(inputPath)
-		if err != nil {
-			fmt.Println("Error reading file:", filename, err)
-			continue
-		}
-
-		splitStr := strings.Split(string(content), "<svg")
-
-		data := SVGFile{
-			LucideClasses: "lucide lucide-" + baseFilename,
-			FuncName:      camelCaseName,
-			Content:       splitStr[len(splitStr)-1],
-		}
-
-		// Write template output to a string first
-		var outputBuffer bytes.Buffer
-		// if err := tmpl.Execute(&outputBuffer, data); err != nil {
-		// 	fmt.Println("Error executing template for:", filename, err)
-		// 	continue
-		// }
-		if err := tmplTemplFunc.Execute(&outputBuffer, data); err != nil {
-			fmt.Println("Error executing template for:", filename, err)
-			continue
-		}
-
-		outputString := outputBuffer.String() // Convert buffer to string
-
-		funcs = append(funcs, outputString)
-
-	}
-
-	fmt.Println("Generating final templ file")
-
-	outputTemplPath := filepath.Join(outputDir, "icons.templ")
-	outputGoTemplPath := filepath.Join(outputDir, "icons_templ.go")
-
-	templFileData := TemplFile{
-		Funcs: strings.Join(funcs, "\n"),
-	}
-
-	var outputFileBuffer bytes.Buffer
-	if err := tmplTemplFile.Execute(&outputFileBuffer, templFileData); err != nil {
-		fmt.Println("Error executing template for:", "templFileData", err)
-		os.Exit(1)
-	}
-
-	outputTemplString := outputFileBuffer.String()
-
-	fmt.Println("Formatting final templ file")
-	t, err := parser.ParseString(outputFileBuffer.String())
-	if err != nil {
-		fmt.Println("Error parsing template by templ:", err)
-		os.Exit(1)
-	}
-	t.Filepath = outputTemplPath
-	t, err = imports.Process(t)
-	if err != nil {
-		fmt.Println("Error processing templ imports:", err)
-		os.Exit(1)
-	}
-	w := new(bytes.Buffer)
-	if err = t.Write(w); err != nil {
-		fmt.Println("formatting error with templ:", err)
-	} else {
-		outputTemplString = w.String()
-	}
-
-	// Write the string output to file
-	if err := os.WriteFile(outputTemplPath, []byte(outputTemplString), 0644); err != nil {
-		fmt.Println("Error writing to output file:", outputTemplPath, err)
-	}
-	fmt.Println("Templ file saved to", outputTemplPath)
-
-	fmt.Println("Generating go file")
-
-	// Generate the go file from templ
-	t, err = parser.ParseString(outputTemplString)
-	if err != nil {
-		fmt.Println("Error parsing template by templ:", err)
-		os.Exit(1)
-	}
-	b := new(bytes.Buffer)
-	_, err = generator.Generate(t, b)
-	if err != nil {
-		fmt.Println("Error generating template:", err)
-		os.Exit(1)
-	}
-
-	fmt.Println("Formatting go file")
-	formattedGoCode, err := format.Source(b.Bytes())
-	if err != nil {
-		fmt.Println("Error formatting generated go code:", err)
-		os.Exit(1)
-	}
-
-	// Write the string output to file
-	if err := os.WriteFile(outputGoTemplPath, formattedGoCode, 0644); err != nil {
-		fmt.Println("Error writing to output file:", outputGoTemplPath, err)
-	}
-	fmt.Println("Go file saved to", outputGoTemplPath)
-
-	// Copy utils.go file
-	srcUtilsPath := filepath.Join(outputDir, "utils/utils.go")
-	dstUtilsPath := filepath.Join(outputDir, "utils.go")
-	if err := copyFile(srcUtilsPath, dstUtilsPath); err != nil {
-		fmt.Println("Error copying utils.go:", err)
-	}
-	fmt.Println("Copied utils.go")
-
-	fmt.Println("Processing complete. Files saved in", outputDir)
 }
