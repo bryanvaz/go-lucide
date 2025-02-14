@@ -27,6 +27,30 @@ Visit [Figma community page](https://www.figma.com/community/plugin/939567362549
 
 <img width="420" src="https://www.figma.com/community/plugin/939567362549682242/thumbnail" alt="Figma Lucide Cover">
 
+## Usage
+
+### Prerequisites
+
+* Go 1.23
+* `gh` CLI
+
+### Sync next version
+
+```bash
+make clean
+make deps
+make build
+make test
+make commit
+make publish
+```
+
+### Sync specific version
+
+```bash
+make build TARGET=v0.465.0
+```
+
 ## License
 
 Lucide is totally free for commercial use and personal use, this software is licensed under the [ISC License](https://github.com/lucide-icons/lucide/blob/main/LICENSE).

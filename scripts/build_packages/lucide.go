@@ -2,6 +2,7 @@ package main
 
 import (
 	"encoding/json"
+	"fmt"
 	"golang.org/x/text/cases"
 	"golang.org/x/text/language"
 	"os"
@@ -17,6 +18,8 @@ func kebabToCamelCase(input string) string {
 	}
 	return strings.Join(words, "")
 }
+
+type LucideIconAlias string
 
 type LucideIconSvg struct {
 	LucideIconSvgPath string
@@ -37,8 +40,6 @@ func (i *LucideIconSvg) Basename() string {
 func (i *LucideIconSvg) LucideClasses() string {
 	return "lucide lucide-" + i.Basename()
 }
-
-type LucideIconAlias string
 
 func (a *LucideIconAlias) CamelCaseName() string {
 	return kebabToCamelCase(string(*a))
@@ -66,16 +67,30 @@ func injestIcons(lucideRepoPath string) ([]*LucideIconSvg, error) {
 				if err != nil {
 					return nil, err
 				}
+				type LucideIconJsonAlias struct {
+					Name string `json:"name"`
+				}
 				type LucideIconJson struct {
-					Aliases []string `json:"aliases"`
+					Aliases []json.RawMessage `json:"aliases"`
 				}
 				var iconJson LucideIconJson
 				err = json.Unmarshal(jsonFile, &iconJson)
 				if err != nil {
+					fmt.Printf("Error unmarshalling json file: %s\n", jsonFilePath)
 					return nil, err
 				}
 				for _, alias := range iconJson.Aliases {
-					aliases = append(aliases, LucideIconAlias(alias))
+					var aliasStr string
+					var aliasObj LucideIconJsonAlias
+					if err := json.Unmarshal(alias, &aliasStr); err == nil {
+						aliases = append(aliases, LucideIconAlias(aliasStr))
+						continue
+					}
+					if err := json.Unmarshal(alias, &aliasObj); err == nil {
+						aliases = append(aliases, LucideIconAlias(aliasObj.Name))
+						continue
+					}
+					fmt.Errorf("Error unmarshalling alias '%s' in file %s", alias, jsonFilePath)
 				}
 			}
 			svgFiles = append(svgFiles, &LucideIconSvg{

@@ -27,6 +27,11 @@ func main() {
 		return
 	}
 
+	targetTag := os.Getenv("TARGET")
+	if targetTag != "" {
+		fmt.Printf("Syncing lucide icon releases for tag %s\n", targetTag)
+	}
+
 	// sync lucide icon versions
 	fmt.Println("Syncing lucide icon releases...")
 	lucideReleases, err := fetchReleases(LUCIDE_OWNER, LUCIDE_REPO)
@@ -38,6 +43,19 @@ func main() {
 	saveReleasesToFile(lucideReleases, releasesJsonPath)
 	releases := filterReleasesAfter(lucideReleases, versionsAfterTime)
 	fmt.Printf("  Latest Lucide release: %s (%s)\n", lucideReleases[0].TagName, lucideReleases[0].PublishedAt)
+	if targetTag != "" {
+		releaseFound := false
+		for _, release := range releases {
+			if release.TagName == targetTag {
+				releaseFound = true
+				break
+			}
+		}
+		if !releaseFound {
+			fmt.Printf("Release %s not found in upstream lucide repo\n", targetTag)
+			os.Exit(1)
+		}
+	}
 
 	// sync the repo into the dist directory
 	fmt.Println("Syncing templ-lucide icon repo...")
@@ -67,7 +85,18 @@ func main() {
 	missingReleases := findMissingTags(tags, releases)
 	fmt.Printf("  Found %d missing tags\n", len(missingReleases))
 	currRel := missingReleases[len(missingReleases)-1]
-	fmt.Println("  Next release to sync:", currRel.TagName)
+	if targetTag != "" {
+		for _, release := range releases {
+			if release.TagName == targetTag {
+				currRel = release
+				break
+			}
+		}
+		fmt.Printf("  Syncing lucide icon releases for tag %s\n", targetTag)
+
+	} else {
+		fmt.Println("  Next release to sync:", currRel.TagName)
+	}
 
 	// sync the repo into the tmp directory
 	fmt.Println("Syncing upstream lucide repo for icons ...")
