@@ -17,7 +17,7 @@ Lucide is an open-source icon library that provides 1000+ vector (svg) files for
 
 | Package | Version | Links |
 | ------- | ------- | ----- |
-| **`go-templ-lucide-icons`** | [![npm](https://img.shields.io/github/v/release/bryanvaz/go-templ-lucide-icons)](https://github.com/bryanvaz/go-templ-lucide-icons/releases) | [Docs](https://pkg.go.dev/github.com/bryanvaz/go-templ-lucide-icons) · [Source](https://github.com/bryanvaz/go-templ-lucide-icons) |
+| **`go-templ-lucide-icons`** | [![go](https://img.shields.io/github/v/release/bryanvaz/go-templ-lucide-icons)](https://github.com/bryanvaz/go-templ-lucide-icons/releases) | [Docs](https://pkg.go.dev/github.com/bryanvaz/go-templ-lucide-icons) · [Source](https://github.com/bryanvaz/go-templ-lucide-icons) |
 
 ### Figma
 

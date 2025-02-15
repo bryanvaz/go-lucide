@@ -78,7 +78,7 @@ func main() {
 	if len(tags) == 0 {
 		fmt.Println("No tags found in templ-lucide")
 	} else {
-		fmt.Printf("  Latest templ-lucide release: %s\n", tags[0])
+		fmt.Printf("  Latest templ-lucide release: %s\n", tags[len(tags)-1])
 	}
 
 	// build list of missing tags starting from latest tag

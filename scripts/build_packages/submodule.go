@@ -2,6 +2,7 @@ package main
 
 import (
 	"bytes"
+	"fmt"
 	"os"
 	"os/exec"
 	filepathPkg "path/filepath"
@@ -35,6 +36,7 @@ func getGitTags(path string) ([]string, error) {
 func findMissingTags(tagList []string, releases []Release) []Release {
 	tagSet := make(map[string]bool)
 	missingTags := []Release{}
+	latestMatchedTag := ""
 
 	// Add all tags from the first list into a set
 	for _, tag := range tagList {
@@ -45,8 +47,13 @@ func findMissingTags(tagList []string, releases []Release) []Release {
 	for _, rel := range releases {
 		if !tagSet[strings.TrimPrefix(rel.TagName, "v")] { // If the tag is not in the first list, add it to missingTags
 			missingTags = append(missingTags, rel)
+		} else if latestMatchedTag == "" {
+			latestMatchedTag = rel.TagName
+			break
 		}
 	}
+
+	fmt.Printf("Latest matched tag: %s\n", latestMatchedTag)
 
 	return missingTags
 }
