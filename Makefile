@@ -1,8 +1,11 @@
 OUT_PATH=templ
 VERSION_FILE = dist/go-templ-lucide-icons/VERSION
-VERSION := $(shell cat $(VERSION_FILE))
+VERSION ?= $(shell if [ -f $(VERSION_FILE) ]; then cat $(VERSION_FILE); else echo "null-version"; fi)
 
+.PHONY: deps
 deps:
+	mkdir -p dist/go-templ-lucide-icons
+	-test -d "./dist/go-templ-lucide-icons/.git" || git clone ssh://git@github.com/bryanvaz/go-templ-lucide-icons.git ./dist/go-templ-lucide-icons
 	go mod tidy
 
 .PHONY: build

@@ -6,6 +6,7 @@ replace github.com/bryanvaz/go-templ-lucide-icons => ./dist/go-templ-lucide-icon
 
 require (
 	github.com/a-h/templ v0.3.833
+	github.com/bryanvaz/go-templ-lucide-icons v0.0.0-00010101000000-000000000000
 	github.com/gofiber/fiber/v2 v2.52.6
 	github.com/google/go-github/v69 v69.0.0
 	golang.org/x/exp v0.0.0-20250210185358-939b2ce775ac

@@ -1,5 +1,41 @@
 [
   {
+    "id": 204357908,
+    "tag_name": "0.479.0",
+    "name": "Version 0.479.0",
+    "zipball_url": "https://api.github.com/repos/lucide-icons/lucide/zipball/0.479.0",
+    "url": "https://api.github.com/repos/lucide-icons/lucide/releases/204357908",
+    "html_url": "https://github.com/lucide-icons/lucide/releases/tag/0.479.0",
+    "published_at": "2025-03-07T12:44:57Z"
+  },
+  {
+    "id": 204350457,
+    "tag_name": "0.478.0",
+    "name": "Version 0.478.0",
+    "zipball_url": "https://api.github.com/repos/lucide-icons/lucide/zipball/0.478.0",
+    "url": "https://api.github.com/repos/lucide-icons/lucide/releases/204350457",
+    "html_url": "https://github.com/lucide-icons/lucide/releases/tag/0.478.0",
+    "published_at": "2025-03-07T12:04:30Z"
+  },
+  {
+    "id": 203070925,
+    "tag_name": "0.477.0",
+    "name": "New icons 0.477.0",
+    "zipball_url": "https://api.github.com/repos/lucide-icons/lucide/zipball/0.477.0",
+    "url": "https://api.github.com/repos/lucide-icons/lucide/releases/203070925",
+    "html_url": "https://github.com/lucide-icons/lucide/releases/tag/0.477.0",
+    "published_at": "2025-02-28T17:01:42Z"
+  },
+  {
+    "id": 202225499,
+    "tag_name": "0.476.0",
+    "name": "Fixes and new icons 0.476.0",
+    "zipball_url": "https://api.github.com/repos/lucide-icons/lucide/zipball/0.476.0",
+    "url": "https://api.github.com/repos/lucide-icons/lucide/releases/202225499",
+    "html_url": "https://github.com/lucide-icons/lucide/releases/tag/0.476.0",
+    "published_at": "2025-02-25T08:14:38Z"
+  },
+  {
     "id": 199066993,
     "tag_name": "0.475.0",
     "name": "New icons 0.475.0",
